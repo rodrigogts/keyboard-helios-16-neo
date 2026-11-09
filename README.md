@@ -1,372 +1,186 @@
-# Linuwu Sense
+# keyboard-helios-16-neo
 
-**Unofficial Linux kernel module for Acer Predator / Nitro gaming laptops** — RGB keyboard backlight, turbo mode, fan control, battery limiter, and more, reverse-engineered from the official PredatorSense app.
+🌐 **Português** · [English](i18n/en/README.md) · [Español](i18n/es/README.md)
 
-The code base is still evolving. It's a bit messy in places, but contributions to structure and organize it further are welcome.
+RGB do teclado (4 zonas) do **Acer Predator Helios Neo 16 (PHN16-72)** funcionando no Linux.
 
-Inspired by [acer-predator-turbo](https://github.com/JafarAkhondali/acer-predator-turbo-and-rgb-keyboard-linux-module), which has a similar goal, this project was born out of my own challenges. I faced issues detecting the Turbo key and ended up using [acer_wmi](https://github.com/torvalds/linux/blob/master/drivers/platform/x86/acer-wmi.c), but it lacked key features like RGB, custom fan support, battery limiter, and more. As a result, I decided to implement these missing features in my own project.
+> [!WARNING]
+> **Leia antes de usar.**
+>
+> Este repositório é uma cópia da branch original do [Linuwu-Sense](https://github.com/0x7375646F/Linuwu-Sense) com **uma única alteração** para funcionar no **meu** modelo: Acer Predator Helios Neo 16 (PHN16-72).
+>
+> - **Não há nenhuma garantia** de que vai funcionar no seu.
+> - **Não me responsabilizo** por qualquer dano que possa ocorrer no seu notebook.
+>
+> Nada aqui deveria causar problema no seu notebook, mas o projeto substitui o driver `acer_wmi` do kernel por um módulo não oficial. Os kernels em que testei estão listados em [Kernels testados](#kernels-testados), e a lista cresce conforme eu for atualizando. Use por sua conta e risco.
 
-> **⚠️ Use at your own risk.** This driver is independently developed through reverse engineering the official PredatorSense app, without any involvement from Acer. It interacts with low-level WMI methods, which may not be tested across all models.
+## Origem
 
-## Contents
+| | |
+|---|---|
+| Upstream | https://github.com/0x7375646F/Linuwu-Sense |
+| Commit base | `4483b6c38b9bb963ac9ada9ca476578e0c63cc08` (2026-10-19, "Merge pull request #147 from nghiant03/feat/anv15-52") |
+| Licença | GPL-3.0 ([`LICENSE`](LICENSE)), herdada do upstream |
+| README original | [`README.upstream.md`](README.upstream.md) |
+| Linhagem | fork do `acer-wmi` do kernel, inspirado em [acer-predator-turbo-and-rgb-keyboard-linux-module](https://github.com/JafarAkhondali/acer-predator-turbo-and-rgb-keyboard-linux-module) |
 
-- [Installation](#-installation)
-- [Usage](#️-usage)
-  - [Thermal Profiles](#0-thermal-profiles-nitro-users-especially-who-dont-have-switch-key-)
-  - [Backlight Timeout](#1-backlight-timeout-)
-  - [Battery Calibration](#2-battery-calibration-)
-  - [Battery Limiter](#3-battery-limiter-)
-  - [Boot Animation Sound](#4-boot-animation-sound-)
-  - [Fan Speed](#5-fan-speed--️)
-  - [LCD Override](#6-lcd-override-️)
-  - [USB Charging](#7-usb-charging-)
-  - [Turbo State & OSD Popup](#8-turbo-state-)
-- [Keyboard Configuration](#-keyboard-configuration)
-- [GUI Frontends](#gui)
-- [Troubleshooting](#-troubleshooting)
-- [Roadmap](#-roadmap)
-- [License](#license)
-- [Donations](#-donations)
+Arquivos copiados: tudo o que o git rastreia no commit acima, sem `.git` e sem artefatos de build. O README do upstream foi renomeado para `README.upstream.md`, e o link em `docs/PHN14-51.md` foi ajustado para o novo nome.
 
-## 🚀 Installation
+Arquivos deste fork: `README.md`, `i18n/`, `helios-kb.sh`, `TESTED_KERNELS`, `patches/` e a linha do patch em `src/linuwu_sense.c`.
 
-**Requirements:** Linux headers matching your running kernel, and `dkms`. Tested on kernel versions 6.12, 6.13 ([previous code base](https://github.com/0x7375646F/Linuwu-Sense/tree/v6.13)), and 6.14 (zen).
+## Testado em
 
-Identify your current kernel version:
-```bash
-uname -r
+| | |
+|---|---|
+| Notebook | Acer Predator Helios Neo 16, **PHN16-72** (DMI product `Predator PHN16-72`, board `EQE_RTX`) |
+| BIOS | V1.14 (2024-09-19) |
+| SO | Ubuntu 24.04 |
+| Compilador | gcc 13.3.0 |
+| Secure Boot | ligado, com validação desativada no shim; o DKMS assina com a MOK em `/var/lib/shim-signed/mok/` |
+
+### Kernels testados
+
+A fonte da verdade é o arquivo [`TESTED_KERNELS`](TESTED_KERNELS), que o `helios-kb.sh` lê e mostra no aviso inicial.
+
+| Kernel | Distro | Data | Resultado |
+|---|---|---|---|
+| `7.0.0-42-generic` | Ubuntu 24.04 | 2026-11-09 | OK (`per_zone_mode` + `four_zone_mode`) |
+
+Oficialmente, o upstream testa só em kernels 6.12 a 6.14.
+
+## O problema
+
+- O `acer_wmi` do kernel não expõe a luz do teclado desse modelo: não existe LED de teclado em `/sys/class/leds`.
+- O teclado é RGB de 4 zonas, controlado pelo EC via WMI (GUID `7A4DDFE7-5B5D-40B4-8595-4408E0CC7F56`). Não aparece nenhum dispositivo USB/HID de RGB, então o OpenRGB não serve.
+- Sem patch, o Linuwu-Sense carrega, mas:
+  - `four_zone_mode` com efeito animado (ex.: wave) **acende**.
+  - `per_zone_mode` (cor fixa por zona) **não faz nada**: o EC grava a cor, mas não mostra.
+  - `four_zone_mode` no modo 0 (static) **apaga** o teclado.
+
+## O patch
+
+[`patches/0001-phn16-72-kb-zone-arm.patch`](patches/0001-phn16-72-kb-zone-arm.patch), já aplicado em `src/linuwu_sense.c`:
+
+```diff
+  static struct quirk_entry quirk_acer_predator_phn16_72 = {
+     .predator_v4 = 1,
+     .four_zone_kb = 1,
++    .kb_zone_arm = 1,      /* teste local PHN16-72 */
+  };
 ```
 
-Install headers and `dkms`:
-```bash
-# Arch Linux
-sudo pacman -S linux-headers dkms
+Com `kb_zone_arm`, o driver roda `gaming_kb_arm_zones()` no probe: consulta `GET_GAMING_SYS_INFO` e chama `SET_GAMING_LED` com "on + todas as zonas". Sem isso, as zonas de LED ficam desarmadas e a cor fixa nunca aparece. O PH315-53 tem o mesmo comportamento e já usava esse quirk no upstream.
 
-# Debian / Ubuntu
-sudo apt install linux-headers-$(uname -r) dkms
+## Atalho: `helios-kb.sh`
+
+O script cobre todos os passos abaixo, com checagens: modelo, patch presente, vermagic do `.ko`, sysfs e dmesg. `./helios-kb.sh --help` lista tudo.
+
+Toda execução começa com o aviso de risco (em inglês, colorido e piscando) e a lista de kernels testados, indicando se o kernel em execução está nela. Os comandos que trocam módulo do kernel (`--smoke-test` e `--install`) só seguem depois de você digitar **Y** em "I understand the risks". Para automação, use `--yes` ou `HELIOS_KB_ACCEPT_RISK=1`.
+
+| Comando | O que faz |
+|---|---|
+| `--make [--kver X]` | Compila para o kernel atual ou para `X`. Com `X`, dá para testar um kernel recém-instalado **antes** do reboot |
+| `--smoke-test` | Carrega o build local sem instalar, acende as 4 zonas (vermelho/verde/azul/branco) e pergunta se acendeu |
+| `--install` | Compila primeiro (falha cedo), roda `sudo make install` e confere DKMS, módulo, sysfs, serviço e grupo |
+| `--uninstall` | `sudo make uninstall` |
+| `--restore` | Volta o `acer_wmi` até o próximo boot |
+| `--status` | Diagnóstico geral, incluindo se o DKMS tem build para o kernel em execução |
+| `--check-patch` | Confere se o quirk do PHN16-72 está no fonte |
+| `--color HEX [HEX HEX HEX] [BRILHO]` | Cor fixa (1 cor = todas as zonas) |
+| `--effect MODO [VEL] [BRILHO] [DIR] [HEX]` | Efeito animado (`wave`, `breathing`, `neon`, `shifting`, `zoom` ou 0-7) |
+| `--off` | Brilho 0, mantendo as cores |
+| `--clean` | Apaga os artefatos de build |
+
+Fluxo típico: `--make` → `--smoke-test` → `--install` → reboot → `--status`.
+
+Kernel novo chegou pelo apt: `./helios-kb.sh --make --kver <versão-nova>` antes de reiniciar. Se falhar, corrija aqui antes do reboot (ver [Quando um kernel novo quebrar](#quando-um-kernel-novo-quebrar)).
+
+## Instalação manual
+
+Pré-requisitos (Ubuntu):
+
+```bash
+sudo apt install linux-headers-$(uname -r) dkms build-essential git
 ```
 
-Clone the repository and build/install the module:
+### 1. Teste temporário (um reboot desfaz)
+
 ```bash
-git clone https://github.com/0x7375646F/Linuwu-Sense.git
-cd Linuwu-Sense
+make -C /lib/modules/$(uname -r)/build M=$PWD modules
+sudo modprobe -a wmi sparse-keymap hid video
+sudo rmmod acer_wmi && sudo insmod src/linuwu_sense.ko
+sudo dmesg | grep linuwu | tail
+```
+
+Warnings que podem aparecer no build, todos inofensivos:
+- `the compiler differs`: é o mesmo gcc, só muda o nome do binário.
+- `pahole version differs` / `Skipping BTF generation`: sem BTF o módulo só perde informação de debug para eBPF.
+
+Para voltar ao original sem reboot: `sudo rmmod linuwu_sense && sudo modprobe acer_wmi`.
+
+### 2. Instalação permanente (DKMS)
+
+```bash
 sudo make install
 ```
 
-`make install` will:
-1. Blacklist the in-kernel `acer_wmi` module (which otherwise conflicts with this driver).
-2. Register `linuwu_sense` with **DKMS** and build/install it for your running kernel.
-3. Load the module and configure it to auto-load on every boot.
-4. Set up a `linuwu_sense` group and sysfs permissions so you don't need `sudo` for everyday use.
+O que isso faz:
+- Coloca o `acer_wmi` na blacklist (`/etc/modprobe.d/blacklist-acer_wmi.conf`).
+- Copia o fonte para `/usr/src/linuwu_sense-1.0` e faz build, assinatura e instalação via DKMS em `/lib/modules/<kernel>/updates/dkms/`. A cada kernel novo, o DKMS recompila sozinho.
+- Habilita o `linuwu_sense.service`, que restaura o estado no boot.
+- Instala o comando `linuwu-sense` e o app gráfico "Penguin Sense".
+- Põe o usuário no grupo `linuwu_sense`. Depois de um relogin, dá para escrever no sysfs sem `sudo`.
 
-Because the module is registered with DKMS, it is **automatically rebuilt whenever your kernel is upgraded** — you do not need to re-run `make install` after every kernel update. Verify at any time with:
-```bash
-dkms status
-```
+Conferir: `dkms status`.
 
-To uninstall:
+### Desinstalar
+
 ```bash
 sudo make uninstall
 ```
 
-## 🛠️ Usage
+Remove o módulo do DKMS, tira a blacklist e recarrega o `acer_wmi` original.
 
-Thermal profiles can be switched with a single click. For battery mode, choose between Eco and Balanced; when plugged into AC, choose Quiet, Balanced, Performance, or Turbo. Each profile is remembered separately for battery and AC power, and the thermal/fan settings adjust automatically based on your current power source.
+## Uso do teclado
 
-For **Predator** laptops, the following path is used: `/sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/predator_sense`
-
-For **Nitro** laptops, the following path is used: `/sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/nitro_sense`
-
-`predator_sense` includes all features except the custom boot logo. `four_zoned_kb` provides RGB support for four-zone keyboards (no per-key RGB support). Here's how to interact with the sysfs files in these directories:
-
-### **0. Thermal Profiles (Nitro users especially who don't have switch key) 🚀**
-
-Some Acer Nitro laptops don't have a thermal profile switch button, so it must be set manually:
-
-To probe the current thermal profile:
-```bash
-cat /sys/firmware/acpi/platform_profile
-```
-
-To check the supported thermal profiles:
-```bash
-cat /sys/firmware/acpi/platform_profile_choices
-```
-
-To switch the platform profile (replace `balanced` with a supported profile):
-```bash
-echo balanced | sudo tee /sys/firmware/acpi/platform_profile
-```
-
-### **1. Backlight Timeout ⏰**
-
-Turns off the keyboard RGB after 30 seconds of idle mode.
-
-| Value | Meaning |
-|---|---|
-| `0` | Disabled |
-| `1` | Enabled |
+**Atenção:** o path real no PHN16-72 é `acer-wmi/four_zoned_kb/`, e não `predator_sense/four_zoned_kb/` como diz o README do upstream.
 
 ```bash
-# Check
-cat /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/predator_sense/backlight_timeout
-
-# Set
-echo 1 | sudo tee /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/predator_sense/backlight_timeout
+B=/sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/four_zoned_kb
 ```
 
-### **2. Battery Calibration 🔋**
-
-Calibrates your battery to provide a more accurate percentage reading: charges to 100%, drains to 0%, then recharges to 100%. **Do not unplug the laptop from AC power during calibration.**
-
-| Value | Meaning |
-|---|---|
-| `1` | Start calibration |
-| `0` | Stop calibration |
+Cor fixa por zona: `RRGGBB` × 4 zonas, mais o brilho (0-100):
 
 ```bash
-# Check
-cat /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/predator_sense/battery_calibration
-
-# Set
-echo 1 | sudo tee /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/predator_sense/battery_calibration
+echo "ff0000,00ff00,0000ff,ffffff,100" | sudo tee $B/per_zone_mode
 ```
 
-### **3. Battery Limiter ⚡**
-
-Limits battery charging to 80%, preserving battery health for laptops primarily used while plugged into AC power.
-
-| Value | Meaning |
-|---|---|
-| `1` | Enabled |
-| `0` | Disabled |
+Efeito: `modo(0-7),velocidade(0-9),brilho(0-100),direção(1-2),R,G,B`:
 
 ```bash
-# Check
-cat /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/predator_sense/battery_limiter
-
-# Set
-echo 1 | sudo tee /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/predator_sense/battery_limiter
+echo "3,4,100,1,0,0,255" | sudo tee $B/four_zone_mode   # wave
 ```
 
-### **4. Boot Animation Sound 🎶**
+Modos: 0 static, 1 breathing, 2 neon, 3 wave, 4 shifting, 5 zoom, 6 e 7 (ver o fonte). Ler o estado atual: `cat $B/per_zone_mode $B/four_zone_mode`. Depois do install, os arquivos ficam `0660 root:linuwu_sense`, então a leitura também precisa de `sudo` até você entrar no grupo.
 
-Enables or disables the custom boot animation and sound.
+Também existem atributos em `acer-wmi/predator_sense/`: `backlight_timeout`, `battery_limiter`, `battery_calibration`, `fan_speed`, `usb_charging`, `lcd_override` e `boot_animation_sound`.
 
-| Value | Meaning |
-|---|---|
-| `1` | Enabled |
-| `0` | Disabled |
+## Quando um kernel novo quebrar
 
-```bash
-# Check
-cat /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/predator_sense/boot_animation_sound
+1. Ver o erro do DKMS: `dkms status` e `/var/lib/dkms/linuwu_sense/1.0/build/make.log`.
+2. Reproduzir o build aqui: `./helios-kb.sh --make --kver <versão>`.
+3. Comparar com o `drivers/platform/x86/acer-wmi.c` do kernel novo. O Linuwu é um fork desse arquivo, então mudança de API costuma aparecer lá primeiro (ex.: `platform_profile`, `wmi_*`, `hwmon`).
+4. Conferir se o upstream já corrigiu e, se sim, trazer o commit para cá mantendo o patch do PHN16-72.
+5. Para reinstalar depois de corrigir: `./helios-kb.sh --uninstall && ./helios-kb.sh --install`.
+6. Funcionou? Acrescente o kernel em [`TESTED_KERNELS`](TESTED_KERNELS) e na tabela dos três READMEs.
 
-# Set
-echo 0 | sudo tee /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/predator_sense/boot_animation_sound
-```
+Saída de emergência enquanto não corrige: `./helios-kb.sh --uninstall`. Volta o `acer_wmi` do kernel e o resto funciona, só fica sem luz no teclado.
 
-### **5. Fan Speed 🌬️**
+## Pendências
 
-Controls the CPU and GPU fan speeds.
+- Abrir PR de uma linha no upstream adicionando `kb_zone_arm = 1` ao PHN16-72.
+- Confirmar que a cor volta sozinha depois de um reboot.
 
-| Value | Meaning |
-|---|---|
-| `0` | Auto |
-| `1` | Minimum fan speed (not recommended) |
-| `100` | Maximum fan speed |
-| other | Any value in between, e.g. `50`, `55`, `70` |
+## Licença
 
-Example (set CPU to 50 and GPU to 70):
-```bash
-echo 50,70 | sudo tee /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/predator_sense/fan_speed
-```
-
-### **6. LCD Override 🖥️**
-
-Reduces LCD latency and minimizes ghosting.
-
-| Value | Meaning |
-|---|---|
-| `1` | Enabled |
-| `0` | Disabled |
-
-```bash
-# Check
-cat /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/predator_sense/lcd_override
-
-# Set
-echo 1 | sudo tee /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/predator_sense/lcd_override
-```
-
-### **7. USB Charging ⚡**
-
-Allows the USB charging port to provide power even when the laptop is off.
-
-| Value | Meaning |
-|---|---|
-| `0` | Disabled |
-| `10` | Provides power until battery reaches 10% |
-| `20` | Provides power until battery reaches 20% |
-| `30` | Provides power until battery reaches 30% |
-
-```bash
-# Check
-cat /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/predator_sense/usb_charging
-
-# Set
-echo 20 | sudo tee /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/predator_sense/usb_charging
-```
-
-### **8. Turbo State 🌀**
-
-Read-only attribute exposing the current turbo hotkey state, for laptops that use the turbo-toggle fan mechanism (e.g. Predator PH315-53 / PH315-52) instead of the `predator_sense` / `nitro_sense` thermal-profile interface.
-
-| Value | Meaning |
-|---|---|
-| `0` | Auto fan mode |
-| `1` | Turbo fan mode |
-
-```bash
-cat /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/turbo_sense/turbo_state
-```
-
-The driver calls `sysfs_notify()` on this file every time the turbo hotkey is toggled, so userspace can `poll()` on it instead of polling in a loop. This is what powers the **Turbo OSD** popup below.
-
-#### Turbo OSD popup 🟢⚪
-
-`osd/linuwu_turbo_osd.py` is a small GTK3 script that shows a transient grey/green popup at the top of the screen for 3 seconds whenever turbo mode is toggled on or off. It blocks on `turbo_state` rather than polling, so it uses no CPU while idle.
-
-Requirements: `python3-gi` with GTK 3 (`sudo apt install python3-gi gir1.2-gtk-3.0` on Debian/Ubuntu/Mint) — install this *before* `sudo make install` so the popup can start immediately.
-
-On hardware where `turbo_sense` exists (e.g. PH315-53 / PH315-52), `sudo make install` automatically installs `linuwu_turbo_osd.py` to `~/.local/share/linuwu-sense/`, installs the systemd `--user` unit to `~/.config/systemd/user/`, and runs `systemctl --user enable --now linuwu-turbo-osd.service` for you — no manual steps needed.
-
-Check it's running with `systemctl --user status linuwu-turbo-osd.service`. If it shows as enabled but not started, log out and back in (there was no active graphical session at install time) or start it manually:
-```bash
-systemctl --user start linuwu-turbo-osd.service
-```
-
-To try the popup directly without the service:
-```bash
-python3 osd/linuwu_turbo_osd.py
-```
-
-## 💻 Keyboard Configuration
-
-### Directory: `four_zoned_kb`
-
-The `four_zoned_kb` directory contains two sysfs files that control the RGB backlight behavior of the four-zone keyboard:
-
-1. **`four_zone_mode`**
-2. **`per_zone_mode`**
-
-#### Per-Zone Mode (`per_zone_mode`) 🎨
-
-Sets a specific RGB color for each of the four keyboard zones individually. Each zone is an RGB value in hex (e.g. `4287f5`, where `42` is Red, `87` is Green, `f5` is Blue).
-
-- The file accepts four color parameters (one per zone) plus a brightness value, all comma-separated.
-- Each color parameter is in the format `RRGGBB`.
-
-Set all four zones to the same color and full brightness:
-```bash
-echo 4287f5,4287f5,4287f5,4287f5,100 | sudo tee /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/four_zoned_kb/per_zone_mode
-```
-
-Set each zone to a unique color:
-```bash
-echo 4287f5,ff5733,33ff57,ff33a6,100 | sudo tee /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/four_zoned_kb/per_zone_mode
-```
-
-Reading (`cat`) the file returns the current values in the same format: `4287f5,4287f5,4287f5,4287f5,100`.
-
-#### Four-Zone Mode (`four_zone_mode`) ✨
-
-Controls advanced RGB effects for the keyboard. Takes seven comma-separated parameters:
-
-| Parameter | Range | Meaning |
-|---|---|---|
-| Mode | 0–7 | Lighting effect type (see table below) |
-| Speed | 0–9 | Speed of the effect (if applicable) |
-| Brightness | 0–100 | Intensity of the lighting effect |
-| Direction | 1–2 | `1` = right to left, `2` = left to right |
-| Red | 0–255 | |
-| Green | 0–255 | |
-| Blue | 0–255 | |
-
-Modes:
-
-| Mode | Name | Notes |
-|---|---|---|
-| 0 | Static | Fixed color, no animation |
-| 1 | Breathing | Color fades in and out |
-| 2 | Neon | Fixed neon glow (black), direction ignored |
-| 3 | Wave | Color transitions across the keyboard |
-| 4 | Shifting | Full control over speed, direction, and color |
-| 5 | Zoom | Direction ignored |
-| 6 | Meteor | Direction ignored |
-| 7 | Twinkling | Direction ignored |
-
-Example — Neon Mode, speed 1, full brightness, top-to-bottom:
-```bash
-echo 3,1,100,2,0,0,0 | sudo tee /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/four_zoned_kb/four_zone_mode
-```
-`3` Neon Mode · `1` Speed · `100` Full brightness · `2` Direction (top to bottom) · `0,0,0` Black (ignored by Neon)
-
-Thermal and fan profiles are saved and reloaded on every reboot, so your settings persist across restarts.
-
-### **⚠️ Note for 2025+ models (ENEK5130 keyboards)**
-
-On some newer Acer laptops the keyboard RGB is no longer wired to the WMI interface this module uses. On these machines both `per_zone_mode` and `four_zone_mode` accept your writes without any error, but the LEDs never change and the keyboard stays on its firmware default wave. Confirmed affected so far: Predator Helios Neo 16S AI (PHN16S-71) and Nitro ANV16S-41. On the Predator Helios Neo 16 (PHN16-73) the dynamic effects still work over WMI but static colors do not.
-
-The RGB on these models is handled by a separate ENE KB5130 controller on i2c-HID. You can check whether your laptop has it:
-
-```bash
-grep -l ENEK5130 /sys/class/hidraw/*/device/uevent
-```
-
-If that prints a path, keyboard RGB on your machine works through HID feature reports on that hidraw device instead of this module. The protocol and a standalone userspace tool are documented at [kbrgb](https://github.com/shwetankg07/kbrgb) (see its `PROTOCOL.md`). Everything else in Linuwu-Sense (fans, thermal profiles, battery limiter and so on) still works normally on these models, so the two can be used side by side.
-
-
-## GUI
-
-- [Div Acer Manager Max by PXDiv](https://github.com/PXDiv/Div-Acer-Manager-Max)
-- [GUI LinuwuSense by KumarVivek](https://github.com/kumarvivek1752/Linuwu-Sense-GUI/tree/main)
-- [RuSense by r3nv-dev](https://github.com/r3nv-dev/rusense) — Rust TUI + GUI (Tauri)
-
-## 🩺 Troubleshooting
-
-**Turbo/hotkeys stopped working after a reboot, or nothing under `/sys/module/linuwu_sense` exists anymore.**
-This almost always means the kernel was upgraded and the module was never rebuilt for the new kernel. Check what's actually loaded:
-```bash
-uname -r                 # kernel you're running now
-dkms status               # should list linuwu_sense as "installed" for that kernel
-lsmod | grep linuwu_sense
-```
-If `dkms status` doesn't show your current kernel, DKMS wasn't able to rebuild it automatically (e.g. it was installed before this project switched to DKMS, or the rebuild failed). Re-run `sudo make install` from the repo to fix it, then confirm `dkms status` lists your running kernel next time.
-
-**Pressing the turbo key does nothing, and `dmesg` shows nothing either.**
-Confirm the module is actually loaded and receiving the key (`sudo dmesg | grep -i turbo` while pressing the key should print `pressed turbo button - N`). If a press is logged but nothing happens, check `dmesg` for a `linuwu_sense: Failed to ...` error — the driver logs a `pr_err` whenever the underlying WMI call to read or set the turbo LED fails, so a firmware/EC-level failure will now show up there instead of failing silently.
-
-**The Turbo OSD popup never appears.**
-`sudo make install` installs and enables `linuwu-turbo-osd.service` automatically on hardware with `turbo_sense`. Check whether it's actually running:
-```bash
-systemctl --user status linuwu-turbo-osd.service
-```
-If the unit isn't found, either your hardware wasn't detected as turbo-capable at install time, or `python3-gi`/GTK 3 wasn't installed yet (see [Turbo OSD popup](#turbo-osd-popup-)) — re-run `sudo make install` after installing it. If it's enabled but not running, there was no active graphical session at install time; log back in or run `systemctl --user start linuwu-turbo-osd.service`. If it's running but still silent, confirm the sysfs file it watches exists and updates: `cat /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/turbo_sense/turbo_state` should flip between `0`/`1` as you press the key.
-
-## 🚧 Roadmap
-
-- [x] GUI for keyboard RGB controls to make it noob-friendly.
-- [x] Module persistence after reboot (via DKMS, surviving kernel upgrades too).
-- [ ] Custom boot logo feature support.
-- [ ] More device support — currently only PHN16-71 is fully supported.
-
-## License
-
-GNU General Public License v3
-
-## 💖 Donations
-
-Donations are completely optional but show your love for open-source development and motivate me to add more features to this project!
-
-USDT (BEP20 - BNB Smart Chain): `0xDA7aa42B9Fc3041F20f4Ec828A70E9bDD54A6822`
+[GPL-3.0](LICENSE), a mesma do [repositório original](https://github.com/0x7375646F/Linuwu-Sense). O arquivo `LICENSE` é cópia idêntica do upstream. O `src/linuwu_sense.c` mantém o cabeçalho `SPDX-License-Identifier: GPL-2.0-or-later` herdado do `acer-wmi` do kernel, compatível com a GPL-3.0. Os arquivos acrescentados por este fork (`helios-kb.sh`, `TESTED_KERNELS`, READMEs e patch) seguem a mesma GPL-3.0.
