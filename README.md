@@ -14,6 +14,48 @@ RGB do teclado (4 zonas) do **Acer Predator Helios Neo 16 (PHN16-72)** funcionan
 >
 > Nada aqui deveria causar problema no seu notebook, mas o projeto substitui o driver `acer_wmi` do kernel por um módulo não oficial. Os kernels em que testei estão listados em [Kernels testados](#kernels-testados), e a lista cresce conforme eu for atualizando. Use por sua conta e risco.
 
+## Sumário
+
+- [Funcionando](#funcionando)
+- [Versão rápida](#versão-rápida)
+- [Origem](#origem)
+- [Testado em](#testado-em) · [Kernels testados](#kernels-testados)
+- [O problema](#o-problema)
+- [O patch](#o-patch)
+- [Atalho: `helios-kb.sh`](#atalho-helios-kbsh)
+- [Instalação manual](#instalação-manual)
+- [Uso do teclado](#uso-do-teclado)
+- [Quando um kernel novo quebrar](#quando-um-kernel-novo-quebrar)
+- [Pendências](#pendências)
+- [Licença](#licença)
+
+## Funcionando
+
+![Teclado do Predator Helios Neo 16 (PHN16-72) aceso em 4 zonas: vermelho, verde, azul e branco](phn16-72-keyboard-rgb.jpg)
+
+PHN16-72 no Ubuntu 24.04, kernel `7.0.0-42-generic`, depois do `--smoke-test`: `per_zone_mode` = `ff0000,00ff00,0000ff,ffffff,100`.
+
+## Versão rápida
+
+```bash
+sudo apt install linux-headers-$(uname -r) dkms build-essential git
+git clone https://github.com/rodrigogts/keyboard-helios-16-neo.git
+cd keyboard-helios-16-neo
+./helios-kb.sh --make
+./helios-kb.sh --smoke-test
+./helios-kb.sh --install
+sudo reboot
+```
+
+Depois do reboot:
+
+```bash
+./helios-kb.sh --status
+./helios-kb.sh --color 4287f5
+```
+
+Para desfazer: `./helios-kb.sh --uninstall`
+
 ## Origem
 
 | | |
