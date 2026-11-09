@@ -14,6 +14,48 @@
 >
 > Nothing here should harm your laptop, but it replaces the kernel's `acer_wmi` driver with an unofficial module. The kernels I have tested are listed under [Tested kernels](#tested-kernels), and the list will grow as I upgrade. Use at your own risk.
 
+## Contents
+
+- [It works](#it-works)
+- [Quick version](#quick-version)
+- [Origin](#origin)
+- [Tested on](#tested-on) · [Tested kernels](#tested-kernels)
+- [The problem](#the-problem)
+- [The patch](#the-patch)
+- [Shortcut: `helios-kb.sh`](#shortcut-helios-kbsh)
+- [Manual installation](#manual-installation)
+- [Using the keyboard](#using-the-keyboard)
+- [When a new kernel breaks it](#when-a-new-kernel-breaks-it)
+- [To do](#to-do)
+- [License](#license)
+
+## It works
+
+![Predator Helios Neo 16 (PHN16-72) keyboard lit in 4 zones: red, green, blue and white](../../phn16-72-keyboard-rgb.jpg)
+
+PHN16-72 on Ubuntu 24.04, kernel `7.0.0-42-generic`, after `--smoke-test`: `per_zone_mode` = `ff0000,00ff00,0000ff,ffffff,100`.
+
+## Quick version
+
+```bash
+sudo apt install linux-headers-$(uname -r) dkms build-essential git
+git clone https://github.com/rodrigogts/keyboard-helios-16-neo.git
+cd keyboard-helios-16-neo
+./helios-kb.sh --make
+./helios-kb.sh --smoke-test
+./helios-kb.sh --install
+sudo reboot
+```
+
+After the reboot:
+
+```bash
+./helios-kb.sh --status
+./helios-kb.sh --color 4287f5
+```
+
+To undo: `./helios-kb.sh --uninstall`
+
 ## Origin
 
 | | |
