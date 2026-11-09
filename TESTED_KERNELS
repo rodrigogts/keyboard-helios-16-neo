@@ -1,0 +1,3 @@
+# Kernels testados no Acer Predator Helios Neo 16 (PHN16-72) / Tested kernels / Kernels probados
+# Formato / Format / Formato:  kernel | distro | data/date/fecha | resultado/result/resultado
+7.0.0-42-generic | Ubuntu 24.04 | 2026-11-09 | OK (per_zone_mode + four_zone_mode)
